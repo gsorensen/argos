@@ -1,10 +1,7 @@
 use std::env;
 use std::process;
-use reqwest::StatusCode;
-use sha2::{Sha224, Digest};
-use async_std::task;
 
-use argos::{UrlResponse, Config};
+use argos::{UrlResponse, Config, ChangeMonitor};
 
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
@@ -22,36 +19,35 @@ async fn main() -> Result<(), reqwest::Error> {
         .user_agent("Mozilla/5.0")
         .build()?;
 
-    // Define state (TODO: Make struct)
-    let mut previous_hash = String::new();
-    let mut consecutive_failure_count: u64 = 0;
+    // Create the monitor object, which contains program state
+    let mut monitor = ChangeMonitor::from(config, client);
 
     loop {
-        let request = client.get(&config.web_address).send().await?;
-        let url_response = UrlResponse::from(request).await?;
+        let url_response = monitor.request_url_response().await.unwrap_or_else(|err| {
+            eprintln!("Failed to request URL repsonse {err}");
+            UrlResponse::invalid()
+        });
 
-        if url_response.status == StatusCode::OK {
-            consecutive_failure_count = 0;
-            let hasher = Sha224::new();
-            let current_hash = url_response.create_hash(hasher);
-    
-            if previous_hash != current_hash {
+        if url_response.is_valid() {
+            monitor.reset_failure_count();
+            let (site_has_changed, current_hash) = monitor.is_hash_changed(url_response);
+
+            if site_has_changed {
+                monitor.set_previous_hash(current_hash);
                 println!("Change in website contents since last check");
             } else {
                 println!("No change since last time");
             }
-    
-            previous_hash = current_hash;
         } else {
-            consecutive_failure_count = consecutive_failure_count + 1;
+            monitor.increment_failure_count();
             eprintln!("Request failed with status code: {}", url_response.status.as_str());
         }
         
-        if consecutive_failure_count == config.max_fail_count {
+        if monitor.max_fail_count_reached() {
             eprintln!("Max number of consecutive failures reached. Exiting program");
             process::exit(1);
         }
 
-        task::sleep(config.check_interval).await;
+        monitor.wait_for_check_interval().await;
     }
 }

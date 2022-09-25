@@ -1,6 +1,7 @@
 use std::{time::Duration, num::ParseIntError};
-use reqwest::{Response, StatusCode};
-use sha2::Digest;
+use reqwest::{Response, StatusCode, Client};
+use sha2::{Digest, Sha224};
+use async_std::task;
 
 pub struct UrlResponse {
     pub status: StatusCode,
@@ -17,6 +18,10 @@ impl UrlResponse {
         Ok(url_response)
     }
 
+    pub fn invalid() -> UrlResponse {
+        UrlResponse { status: StatusCode::NO_CONTENT, body: String::from("") }
+    }
+
     pub fn create_hash<D>(&self, mut hasher: D) -> String
     where
         D: Digest,
@@ -24,6 +29,10 @@ impl UrlResponse {
     {
         hasher.update(&self.body);
         format!("{:x}", hasher.finalize())
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.status == StatusCode::OK
     }
 }
 
@@ -90,5 +99,59 @@ impl Config {
             check_interval: check_interval_secs,
             max_fail_count: max_fail_count,
         })
+    }
+}
+
+pub struct ChangeMonitor {
+    config: Config,
+    client: Client,
+    previous_hash: String,
+    consecutive_fail_count: u64,
+}
+
+impl ChangeMonitor {
+    pub fn from(config: Config, client: Client) -> ChangeMonitor {
+        ChangeMonitor {
+            config,
+            client,
+            previous_hash: String::new(),
+            consecutive_fail_count: 0
+        }
+    }
+
+    pub async fn request_url_response(&self) -> Result<UrlResponse, reqwest::Error> {
+        let request = self.client.get(&self.config.web_address).send().await?;
+        let url_response = UrlResponse::from(request).await?;
+
+        Ok(url_response)
+    }
+
+    pub fn is_hash_changed(&self, response: UrlResponse) -> (bool, String) {
+        let hasher = Sha224::new();
+        let current_hash = response.create_hash(hasher);
+
+        let hash_changed = current_hash != self.previous_hash;
+
+        (hash_changed, current_hash)
+    }
+
+    pub fn set_previous_hash(&mut self, hash: String) {
+        self.previous_hash = hash;
+    }
+
+    pub fn reset_failure_count(&mut self) {
+        self.consecutive_fail_count = 0;
+    }
+
+    pub fn increment_failure_count(&mut self) {
+        self.consecutive_fail_count = self.consecutive_fail_count + 1;
+    }
+
+    pub async fn wait_for_check_interval(&self) {
+        task::sleep(self.config.check_interval).await;
+    }
+
+    pub fn max_fail_count_reached(&self) -> bool {
+        &self.consecutive_fail_count == &self.config.max_fail_count
     }
 }
