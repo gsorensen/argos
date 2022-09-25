@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{time::Duration, num::ParseIntError};
 use reqwest::{Response, StatusCode};
 use sha2::Digest;
 
@@ -30,7 +30,7 @@ impl UrlResponse {
 pub struct Config {
     pub web_address: String,
     pub check_interval: Duration,
-    pub max_fail_count: u32
+    pub max_fail_count: u64
 }
 
 impl Config {
@@ -39,6 +39,7 @@ impl Config {
             return Err("No arguments provided");
         } 
 
+        // Only address specified, use with default parameters
         if args.len() == 3 {
             let config = Config {
                 web_address: args[1].clone(),
@@ -47,7 +48,47 @@ impl Config {
             };
             return Ok(config);
         }
+        
+        let mut web_address = String::new();
+        let mut check_interval_secs = Duration::from_secs(30);
+        let mut max_fail_count = 10;
 
-        Err("test")
+        for idx in (1..args.len()).step_by(2) {
+            let flag = &args[idx];
+            
+            if flag == "-w" {
+                web_address = String::from(&args[idx + 1]);
+                println!("Address: {web_address}");
+                continue;
+            }
+
+            if flag == "-d" {
+                let parsed_duration: Result<u64, ParseIntError> = args[idx + 1].parse();
+
+                match parsed_duration {
+                    Ok(duration) => check_interval_secs = Duration::from_secs(duration),
+                    Err(_) => return Err("Failed to parse valid check duration"),
+                }
+
+                continue;
+            }
+
+            if flag == "-n" {
+                let parsed_max_fail_count: Result<u64, ParseIntError> = args[idx + 1].parse();
+
+                match parsed_max_fail_count {
+                    Ok(count) => max_fail_count = count,
+                    Err(_) => return Err("Failed to parse valid max fail count"),
+                }
+
+                continue;
+            }
+        }
+
+        Ok(Config {
+            web_address: web_address,
+            check_interval: check_interval_secs,
+            max_fail_count: max_fail_count,
+        })
     }
 }
