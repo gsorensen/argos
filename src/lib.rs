@@ -1,7 +1,7 @@
 use std::{time::Duration, num::ParseIntError};
 use reqwest::{Response, StatusCode, Client};
 use sha2::{Digest, Sha224};
-use async_std::task;
+use tokio::time;
 
 pub struct UrlResponse {
     pub status: StatusCode,
@@ -148,7 +148,7 @@ impl ChangeMonitor {
     }
 
     pub async fn wait_for_check_interval(&self) {
-        task::sleep(self.config.check_interval).await;
+        time::sleep(self.config.check_interval).await;
     }
 
     pub fn max_fail_count_reached(&self) -> bool {
