@@ -1,18 +1,15 @@
-use std::env;
 use std::process;
 
-use argos::{UrlResponse, Config, ChangeMonitor};
+use argos::{CliArgs, UrlResponse, Config, ChangeMonitor};
+use clap::Parser;
 
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error> {
     // Collect arguments from the console
-    let args: Vec<String> = env::args().collect();
+    let args = CliArgs::parse();
 
     // Build config from console input
-    let config = Config::build(&args).unwrap_or_else(|err| {
-        eprintln!("Failed to build config from console: {err}. Exiting");
-        process::exit(1);
-    });
+    let config = Config::from(args);
 
     // Construct the client with default Mozilla User-Agent
     let client = reqwest::Client::builder()
