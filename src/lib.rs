@@ -2,6 +2,7 @@ use std::{time::Duration, num::ParseIntError};
 use reqwest::{Response, StatusCode, Client};
 use sha2::{Digest, Sha224};
 use tokio::time;
+use clap::Parser;
 
 pub struct UrlResponse {
     pub status: StatusCode,
@@ -34,6 +35,19 @@ impl UrlResponse {
     pub fn is_valid(&self) -> bool {
         self.status == StatusCode::OK
     }
+}
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+pub struct Args {
+    #[arg(short, long)]
+    pub web_address: String,
+
+    #[arg(short, long, default_value_t = 30)]
+    pub check_interval_sec: u64,
+
+    #[arg(short, long, default_value_t = 10)]
+    pub max_num_of_failures: u64,
 }
 
 pub struct Config {
