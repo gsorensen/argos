@@ -5,12 +5,17 @@ use std::process;
 use std::time::Duration;
 use tokio::time;
 
+/// A URL response consisting of a status code and the body of the fetched
+/// reqwest::Response type
 pub struct UrlResponse {
     pub status: StatusCode,
     pub body: String,
 }
 
 impl UrlResponse {
+    /// Converts a generic reqwest::Response object to the local UrlResponse object
+    /// which is only concerned with the status code and the contents of the body
+    /// (which is what we want to look for changes in)
     pub async fn from(response: Response) -> Result<UrlResponse, reqwest::Error> {
         let url_response = UrlResponse {
             status: response.status(),
@@ -20,6 +25,8 @@ impl UrlResponse {
         Ok(url_response)
     }
 
+    /// Function that returns an UrlResponse with a NO_CONTENT status code
+    /// and an empty body.
     pub fn invalid() -> UrlResponse {
         UrlResponse {
             status: StatusCode::NO_CONTENT,
@@ -27,6 +34,8 @@ impl UrlResponse {
         }
     }
 
+    /// Hash the body of the UrlResponse using Sha224
+    /// Returns a string of hexadecimals
     pub fn hash(&self) -> String {
         let mut hasher = Sha224::new();
         hasher.update(&self.body);
@@ -38,6 +47,11 @@ impl UrlResponse {
     }
 }
 
+/// Struct containing the CLI input.
+/// Uses Clap for simplifying custom loging.
+/// If any input is invalid, clap will exit the program
+/// before anything is done, so the errors there are handled
+/// before we move beyond this step
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct CliArgs {
@@ -51,6 +65,9 @@ pub struct CliArgs {
     pub max_num_of_failures: u64,
 }
 
+/// The config of the monitoring process. Contains the
+/// web address to fetch, how often you should fetch it and
+/// how many times you should fail doing so before you exit
 pub struct Config {
     pub web_address: String,
     pub check_interval: Duration,
@@ -58,6 +75,7 @@ pub struct Config {
 }
 
 impl Config {
+    /// Takes in a CliArgs struct and returns a Config struct
     pub fn from(args: CliArgs) -> Config {
         Config {
             web_address: args.web_address,
@@ -67,6 +85,9 @@ impl Config {
     }
 }
 
+/// Our monitoring object, endearingly called EyeOfArgos. Usage here is currently
+/// to initialise an object of this type in e.g. your main function and await the `watch()`
+/// function.
 pub struct EyeOfArgos {
     config: Config,
     client: Client,
